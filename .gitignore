@@ -18,3 +18,10 @@ Thumbs.db
 
 /data/*
 .idea
+*.stack-work*
+*.ipynb_checkpoints*
+*dist-newstyle*
+*.iml
+*.lock
+*Untitled*
+*.cabal
