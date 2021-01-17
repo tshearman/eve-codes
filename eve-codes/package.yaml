@@ -21,6 +21,7 @@ description: Please see the README.
 dependencies:
 - QuickCheck
 - aeson
+- async
 - base
 - bytestring
 - case-insensitive
@@ -32,6 +33,7 @@ dependencies:
 - lens-aeson
 - nats
 - optparse-applicative
+- parallel
 - postgresql-simple
 - text
 - time
@@ -41,7 +43,7 @@ library:
   source-dirs: src
 
 executables:
-  eve-codes:
+  eve-universe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -50,6 +52,16 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - eve-codes
+
+  eve-orders:
+    main:                Orders.hs
+    source-dirs:         app
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - eve-codes
 
 tests:
   eve-codes-unit-tests:

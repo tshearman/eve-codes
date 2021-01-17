@@ -6,6 +6,8 @@ module Main where
 import System.Environment as SE
 import Universe
 import Endpoints
+import Connection
+import Control.Concurrent.Async
 import qualified Database.PostgreSQL.Simple as PG
 import qualified Data.ByteString.Char8 as BC
 import qualified Options.Applicative as Opt
@@ -31,22 +33,19 @@ parse = Options
   <*> Opt.strOption ( Opt.long "endpoint" <> Opt.help "Data to collect" )
   <*> Opt.strOption ( Opt.long "user" <> Opt.help "POSTGRES User name" )
 
-connectionString :: String -> String -> String -> String
-connectionString h user db = "host=" ++ h ++ " user=" ++ user ++ " dbname=" ++ db
-
 collected :: Sources -> PG.Connection -> IO ()
 collected Jumps conn = do 
   (header, data_) <- collect (systemJumpsPath Latest Tranquility) :: IO (Header, [SystemJumps])
-  rowsInserted <- PG.executeMany conn (query @SystemJumps) (map (toValue (getLastModified eveDateFormat header)) data_)
+  rowsInserted <- PG.executeMany conn (query @SystemJumps) (map (timeToValue (getLastModified eveDateFormat header)) data_)
   print rowsInserted
 collected Kills conn = do 
   (header, data_) <- collect (systemKillsPath Latest Tranquility) :: IO (Header, [SystemKills])
-  rowsInserted <- PG.executeMany conn (query @SystemKills) (map (toValue (getLastModified eveDateFormat header)) data_)
+  rowsInserted <- PG.executeMany conn (query @SystemKills) (map (timeToValue (getLastModified eveDateFormat header)) data_)
   print rowsInserted
-  
+
 execute :: Options -> IO ()
 execute (Options h db e user) = do
-  conn <- PG.connectPostgreSQL $ BC.pack (connectionString h user db)
+  conn <- Connection.open h user db
   collected (sourcesFromString e) conn
 
 main :: IO ()

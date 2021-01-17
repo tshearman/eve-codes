@@ -60,6 +60,9 @@ filterHeader key hdr = head ls where
   k = CI.mk $ BC.pack key
   ls = filter (\(n, _) -> n == k) hdr
 
+getPages :: Header -> Int
+getPages hdr = read(BC.unpack $ snd $ filterHeader "x-pages" hdr) :: Int
+
 getDate :: DateFormat -> String -> Header -> POSIXTime
 getDate fmt key r = fromJust $ parseEpoch fmt $ BC.unpack $ snd $ filterHeader key r
 
@@ -77,19 +80,24 @@ parseEpoch f t = utcTimeToPOSIXSeconds <$> s
 (./) :: String -> String -> String
 x ./ y = ((x ++) . ("/" ++) . (y ++)) ""
 
-class Collectible a where
+class Processable a where
   process :: FromJSON a => Response BLI.ByteString -> (Header, [a])
-  process response = (hdr, rows) where
+  process response = (getResponseHeaders response, processBody response)
+
+  processBody :: FromJSON a => Response BLI.ByteString -> [a]
+  processBody response = rows where
     body = getResponseBody response
-    hdr = getResponseHeaders response
     decoded = decode body
     rows = case decoded of
       Nothing -> []
       (Just as) -> as
 
-  collect :: FromJSON a => Endpoint -> IO (Header, [a])
+class Collectible a where
+  collect :: (FromJSON a, Processable a) => Endpoint -> IO (Header, [a])
   collect e = fmap process (retrieve e)
 
-class DatedSqlible a where
+class Sqlible a where
   query :: PG.Query
-  toValue :: POSIXTime -> a -> [Action]
+
+class TimeToValue a where
+  timeToValue :: POSIXTime -> a -> [Action]
