@@ -3,12 +3,12 @@
 
 module Orders where
 
-import System.Environment as SE
-import Universe
 import Endpoints
+import Esi
+import OrdersLib
 import Control.Concurrent.Async
 import qualified Database.PostgreSQL.Simple as PG
-import qualified Data.ByteString.Char8 as BC
+import Database.PostgreSQL.Simple.ToField (Action)
 import qualified Options.Applicative as Opt
 import Options.Applicative ((<**>))
 import Connection
@@ -22,9 +22,9 @@ data Options = Options {
 }
 
 orderTypesFromString :: String -> OrderTypes
-orderTypesFromString "all" = All
 orderTypesFromString "buy" = Buy
 orderTypesFromString "sell" = Sell
+orderTypesFromString _ = All
 
 parse :: Opt.Parser Options
 parse = Options 
@@ -35,24 +35,25 @@ parse = Options
   <*> Opt.strOption ( Opt.long "types" <> Opt.help "Order types to collect" )
 
 collectThePage :: RegionId -> OrderTypes -> Int -> IO (Header, [MarketOrder])
-collectThePage region orders page = do
-  (h, r) <- collect (marketsRegionsOrdersPath Latest Tranquility region orders page) :: IO (Header, [MarketOrder])
+collectThePage region_ orders page = do
+  (h, r) <- collect (marketsRegionsOrdersPath Latest Tranquility region_ orders page) :: IO (Header, [MarketOrder])
   return (h, r)
 
+parseOrder :: TimeRegionToValue a => Header -> RegionId -> a -> [Action]
 parseOrder header = timeRegionToValue (getLastModified eveDateFormat header)
 
 collectedOrders :: RegionId -> OrderTypes -> PG.Connection -> IO ()
-collectedOrders region orders conn = do
-    (header, data_) <- collectThePage region orders 1
-    initialRowsInserted <- PG.executeMany conn (query @MarketOrder) (map (parseOrder header region) data_) 
-    res <- mapConcurrently (collectThePage region orders) [2 .. (getPages header)]
-    rowsInserted <- PG.executeMany conn (query @MarketOrder) (concat $ fmap snd res)
+collectedOrders region_ orders conn = do
+    (header, data_) <- collectThePage region_ orders 1
+    initialRowsInserted <- PG.executeMany conn (query @MarketOrder) $ map (parseOrder header region_) data_ 
+    res <- mapConcurrently (collectThePage region_ orders) [2 .. (getPages header)]
+    rowsInserted <- PG.executeMany conn (query @MarketOrder) $ map (parseOrder header region_) (concatMap snd res)
     print (initialRowsInserted + rowsInserted)
 
 execute :: Options -> IO ()
-execute (Options h db user region ts) = do
-  conn <- Connection.open h user db
-  collectedOrders region (orderTypesFromString ts) conn
+execute (Options h db user_ region_ ts) = do
+  conn <- Connection.open h user_ db
+  collectedOrders region_ (orderTypesFromString ts) conn
 
 main :: IO ()
 main = execute =<< Opt.execParser options

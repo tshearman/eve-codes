@@ -77,6 +77,12 @@ parseEpoch f t = utcTimeToPOSIXSeconds <$> s
   where s = parseTimeM True locale f t :: Maybe UTCTime
         locale = defaultTimeLocale
 
+esi :: String
+esi = "https://esi.evetech.net"
+
+eveDateFormat :: DateFormat
+eveDateFormat = "%a, %d %b %Y %T %Z"
+
 (./) :: String -> String -> String
 x ./ y = ((x ++) . ("/" ++) . (y ++)) ""
 
