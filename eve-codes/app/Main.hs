@@ -14,7 +14,8 @@ import Options.Applicative ((<**>))
 data Options = Options {
   host :: String,
   dbname :: String,
-  endpoint :: String
+  endpoint :: String,
+  user :: String
 }
 
 data Sources = Jumps | Kills
@@ -28,6 +29,7 @@ parse = Options
   <$> Opt.strOption ( Opt.long "host" <> Opt.help "POSTGRES Hostname" )
   <*> Opt.strOption ( Opt.long "dbname" <> Opt.help "POSTGRES Database" )
   <*> Opt.strOption ( Opt.long "endpoint" <> Opt.help "Data to collect" )
+  <*> Opt.strOption ( Opt.long "user" <> Opt.help "POSTGRES User name" )
 
 connectionString :: String -> String -> String -> String
 connectionString h user db = "host=" ++ h ++ " user=" ++ user ++ " dbname=" ++ db
@@ -43,8 +45,7 @@ collected Kills conn = do
   print rowsInserted
   
 execute :: Options -> IO ()
-execute (Options h db e) = do
-  user <- SE.getEnv "USER"
+execute (Options h db e user) = do
   conn <- PG.connectPostgreSQL $ BC.pack (connectionString h user db)
   collected (sourcesFromString e) conn
 

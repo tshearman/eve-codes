@@ -41,7 +41,7 @@ library:
   source-dirs: src
 
 executables:
-  eve-codes-exe:
+  eve-codes:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
