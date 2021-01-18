@@ -6,20 +6,19 @@ module Orders where
 import Endpoints
 import Esi
 import OrdersLib
-import Control.Concurrent.Async
 import qualified Database.PostgreSQL.Simple as PG
 import Database.PostgreSQL.Simple.ToField (Action)
 import qualified Options.Applicative as Opt
 import Options.Applicative ((<**>))
 import Connection
+import Control.Concurrent.Async
 
 data Options = Options {
   host :: String,
   dbname :: String,
   user :: String,
   region :: Integer,
-  order_types :: String,
-  threads :: Int
+  order_types :: String
 }
 
 orderTypesFromString :: String -> OrderTypes
@@ -34,7 +33,6 @@ parse = Options
   <*> Opt.strOption ( Opt.long "user" <> Opt.help "POSTGRES User name" ) 
   <*> Opt.option Opt.auto ( Opt.long "region" <> Opt.help "Eve Region id" )
   <*> Opt.strOption ( Opt.long "types" <> Opt.help "Order types to collect" )
-  <*> Opt.option Opt.auto ( Opt.long "threads" <> Opt.help "Number of Threads to Use")
 
 collectThePage :: RegionId -> OrderTypes -> Int -> IO (Header, [MarketOrder])
 collectThePage region_ orders page = do
@@ -44,18 +42,18 @@ collectThePage region_ orders page = do
 parseOrder :: TimeRegionToValue a => Header -> RegionId -> a -> [Action]
 parseOrder header = timeRegionToValue (getLastModified eveDateFormat header)
 
-collectedOrders :: Int -> RegionId -> OrderTypes -> PG.Connection -> IO ()
-collectedOrders threads_ region_ orders conn = do
+collectedOrders :: RegionId -> OrderTypes -> PG.Connection -> IO ()
+collectedOrders region_ orders conn = do
     (header, data_) <- collectThePage region_ orders 1
     initialRowsInserted <- PG.executeMany conn (query @MarketOrder) $ map (parseOrder header region_) data_
-    res <- mapPool threads_ (collectThePage region_ orders) [2 .. (getPages header)]
+    res <- mapConcurrently (collectThePage region_ orders) [2 .. (getPages header)]
     rowsInserted <- PG.executeMany conn (query @MarketOrder) $ map (parseOrder header region_) (concatMap snd res)
     print (initialRowsInserted + rowsInserted)
 
 execute :: Options -> IO ()
-execute (Options host_ db_ user_ region_ order_types_ threads_) = do
+execute (Options host_ db_ user_ region_ order_types_) = do
   conn <- Connection.open host_ user_ db_
-  _ <- mapPool threads_ (\r -> collectedOrders threads_ r (orderTypesFromString order_types_) conn) regions
+  _ <- mapConcurrently (\r -> collectedOrders r (orderTypesFromString order_types_) conn) regions
   putStrLn "completed" where
     regions = if region_ < 0 then filter notMarketRegions allRegions else [region_]
 
