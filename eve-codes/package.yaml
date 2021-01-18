@@ -38,6 +38,9 @@ dependencies:
 - text
 - time
 - wreq
+- SafeSemaphore
+- pooled-io
+- deepseq
 
 library:
   source-dirs: src
@@ -54,6 +57,13 @@ executables:
     main: Orders.hs
     source-dirs: app
     ghc-options: -threaded -rtsopts -with-rtsopts=-N -main-is Orders
+    dependencies:
+    - eve-codes
+
+  eve-order-books:
+    main: OrderBooks.hs
+    source-dirs: app
+    ghc-options: -threaded -rtsopts -with-rtsopts=-N -main-is OrderBooks
     dependencies:
     - eve-codes
 

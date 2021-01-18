@@ -10,7 +10,7 @@ import Control.Lens
 import Data.Aeson
 import Data.Maybe
 import Data.Time (UTCTime, parseTimeM, defaultTimeLocale)
-import Data.Time.Clock.POSIX (POSIXTime, utcTimeToPOSIXSeconds)
+import Data.Time.Clock.POSIX (POSIXTime, utcTimeToPOSIXSeconds, posixSecondsToUTCTime)
 import Database.PostgreSQL.Simple.ToField (Action)
 import Network.HTTP.Simple hiding (Header, Query)
 import Network.HTTP.Types.Header (HeaderName)
@@ -22,6 +22,7 @@ import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Network.Wreq.Lens as L
 import qualified Database.PostgreSQL.Simple as PG
+import Data.Time.Format (formatTime)
 
 type Header = [(HeaderName, BI.ByteString)]
 type DateFormat = String
@@ -76,12 +77,9 @@ parseEpoch :: DateFormat -> String -> Maybe POSIXTime
 parseEpoch f t = utcTimeToPOSIXSeconds <$> s
   where s = parseTimeM True locale f t :: Maybe UTCTime
         locale = defaultTimeLocale
-
-esi :: String
-esi = "https://esi.evetech.net"
-
-eveDateFormat :: DateFormat
-eveDateFormat = "%a, %d %b %Y %T %Z"
+        
+formatEpoch :: DateFormat -> POSIXTime -> String
+formatEpoch f s = formatTime defaultTimeLocale f $ posixSecondsToUTCTime s
 
 (./) :: String -> String -> String
 x ./ y = ((x ++) . ("/" ++) . (y ++)) ""
