@@ -14,6 +14,7 @@ import Endpoints
 import Esi
 import GHC.Generics (Generic)
 import qualified Data.Text as T
+import Control.DeepSeq (NFData)
 
 data OrderTypes = All | Buy | Sell
 instance Show OrderTypes where
@@ -37,7 +38,7 @@ data MarketOrder = MarketOrder
     type_id :: TypeId,
     volume_remain :: Integer,
     volume_total :: Integer
-  } deriving (Show, Generic, ToRow)
+  } deriving (Show, Generic, ToRow, NFData)
 instance FromJSON MarketOrder
 instance Processable MarketOrder
 instance Collectible MarketOrder

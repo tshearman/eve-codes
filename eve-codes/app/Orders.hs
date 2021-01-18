@@ -44,18 +44,18 @@ collectThePage region_ orders page = do
 parseOrder :: TimeRegionToValue a => Header -> RegionId -> a -> [Action]
 parseOrder header = timeRegionToValue (getLastModified eveDateFormat header)
 
-collectedOrders :: RegionId -> OrderTypes -> PG.Connection -> IO ()
-collectedOrders region_ orders conn = do
+collectedOrders :: Int -> RegionId -> OrderTypes -> PG.Connection -> IO ()
+collectedOrders threads_ region_ orders conn = do
     (header, data_) <- collectThePage region_ orders 1
     initialRowsInserted <- PG.executeMany conn (query @MarketOrder) $ map (parseOrder header region_) data_
-    res <- mapConcurrently (collectThePage region_ orders) [2 .. (getPages header)]
+    res <- mapPool threads_ (collectThePage region_ orders) [2 .. (getPages header)]
     rowsInserted <- PG.executeMany conn (query @MarketOrder) $ map (parseOrder header region_) (concatMap snd res)
     print (initialRowsInserted + rowsInserted)
 
 execute :: Options -> IO ()
 execute (Options host_ db_ user_ region_ order_types_ threads_) = do
   conn <- Connection.open host_ user_ db_
-  _ <- mapPool threads_ (\r -> collectedOrders r (orderTypesFromString order_types_) conn) regions
+  _ <- mapPool threads_ (\r -> collectedOrders threads_ r (orderTypesFromString order_types_) conn) regions
   putStrLn "completed" where
     regions = if region_ < 0 then filter notMarketRegions allRegions else [region_]
 
