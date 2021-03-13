@@ -1,52 +1,52 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module UniverseLib where
 
-import Data.Aeson
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-import Database.PostgreSQL.Simple.ToField (toField)
-import Database.PostgreSQL.Simple.ToRow (ToRow)
-import Endpoints
-import GHC.Generics (Generic)
-import qualified Data.Text as T
+import qualified Database.PostgreSQL.Simple as PG
+import EndpointsLib
 import Esi
+import UniverseEndpoints
+import UniverseTypes
 
-universePath :: String -> EsiVersion -> EsiSource -> Endpoint
-universePath end ver source = Endpoint p o
-  where p = esi ./ show ver ./ "universe" ./ end
-        o = genOptions params
-        params = [Param "datasource" [T.pack $ show source]]
+data Sources = Jumps | Kills
 
-data SystemJumps = SystemJumps
-  { ship_jumps :: Integer,
-    system_id :: SystemId
-  } deriving (Show, Generic, ToRow)
-instance FromJSON SystemJumps
-instance Processable SystemJumps
-instance Collectible SystemJumps
-instance Sqlible SystemJumps where
-  query = "INSERT INTO universe.\"systemJumps\" (time, systemid, shipjumps) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
-instance TimeToValue SystemJumps where
-  timeToValue ts (SystemJumps j i) = [toField $ posixSecondsToUTCTime ts, toField i, toField j]
-systemJumpsPath :: EsiVersion -> EsiSource -> Endpoint
-systemJumpsPath = universePath "system_jumps"
+sourcesFromString :: String -> Sources
+sourcesFromString "jumps" = Jumps
+sourcesFromString _ = Kills
 
-data SystemKills = SystemKills
-  { npc_kills :: Integer,
-    pod_kills :: Integer,
-    ship_kills :: Integer,
-    system_id :: SystemId
-  } deriving (Show, Generic, ToRow)
-instance FromJSON SystemKills
-instance Processable SystemKills
-instance Collectible SystemKills
-instance Sqlible SystemKills where
-  query = "INSERT INTO universe.\"systemKills\" (time, systemid, npckills, podkills, shipkills) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
-instance TimeToValue SystemKills where
-  timeToValue ts (SystemKills n p s i) = [toField $ posixSecondsToUTCTime ts, toField i, toField n, toField p, toField s]
-systemKillsPath :: EsiVersion -> EsiSource -> Endpoint
-systemKillsPath = universePath "system_kills"
+collectSystemJumps :: EsiVersion -> EsiSource -> IO (Header, [SystemJumps])
+collectSystemJumps ver source = do
+  collect (systemJumpsPath ver source) :: IO (Header, [SystemJumps])
+
+collectSystemKills :: EsiVersion -> EsiSource -> IO (Header, [SystemKills])
+collectSystemKills ver source = do
+  collect (systemKillsPath ver source) :: IO (Header, [SystemKills])
+
+collectRegions :: EsiVersion -> EsiSource -> IO (Header, [RegionId])
+collectRegions ver source = do
+  collect (regionsPath ver source) :: IO (Header, [RegionId])
+
+collectSystems :: EsiVersion -> EsiSource -> IO (Header, [SystemId])
+collectSystems ver source = do
+  collect (systemsPath ver source) :: IO (Header, [SystemId])
+
+collectSystem :: EsiVersion -> EsiSource -> SystemId -> IO (Header, Maybe System)
+collectSystem ver source s = do
+  collectInd (systemPath s ver source) :: IO (Header, Maybe System)
+
+collectStargate :: EsiVersion -> EsiSource -> Integer -> IO (Header, [Stargate])
+collectStargate ver source s = do
+  collect (stargatePath s ver source) :: IO (Header, [Stargate])
+
+collected :: Sources -> PG.Connection -> IO ()
+collected Jumps conn = do
+  (header, data_) <- collectSystemJumps Latest Tranquility
+  rowsInserted <- PG.executeMany conn (query @SystemJumps) (map (timeToValue (getLastModified eveDateFormat header)) data_)
+  print rowsInserted
+collected Kills conn = do
+  (header, data_) <- collectSystemKills Latest Tranquility
+  rowsInserted <- PG.executeMany conn (query @SystemKills) (map (timeToValue (getLastModified eveDateFormat header)) data_)
+  print rowsInserted

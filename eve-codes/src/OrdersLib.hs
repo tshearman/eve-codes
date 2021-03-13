@@ -1,69 +1,39 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module OrdersLib where
 
-import Data.Aeson
-import Data.Time.Clock.POSIX (POSIXTime, posixSecondsToUTCTime)
-import Database.PostgreSQL.Simple.ToField (toField, Action)
-import Database.PostgreSQL.Simple.ToRow (ToRow)
-import Endpoints
+import Control.Concurrent.Async
+import qualified Database.PostgreSQL.Simple as PG
+import Database.PostgreSQL.Simple.ToField (Action)
+import EndpointsLib
 import Esi
-import GHC.Generics (Generic)
-import qualified Data.Text as T
-import Control.DeepSeq (NFData)
+import OrdersEndpoints
+import OrdersTypes
 
-data OrderTypes = All | Buy | Sell
-instance Show OrderTypes where
-  show All = "all"
-  show Buy = "buy"
-  show Sell = "sell"
+collectOrderPage :: RegionId -> OrderTypes -> Int -> IO (Header, [MarketOrder])
+collectOrderPage region_ orders page = do
+  (h, r) <- collect (marketsRegionsOrdersPath Latest Tranquility region_ orders page) :: IO (Header, [MarketOrder])
+  return (h, r)
 
-class TimeRegionToValue a where
-  timeRegionToValue :: POSIXTime -> RegionId -> a -> [Action]
+parseOrder :: TimeRegionToValue a => Header -> RegionId -> a -> [Action]
+parseOrder header = timeRegionToValue (getLastModified eveDateFormat header)
 
-data MarketOrder = MarketOrder
-  { duration :: Integer,
-    is_buy_order :: Bool,
-    issued :: String,
-    location_id :: LocationId,
-    min_volume :: Integer,
-    order_id :: Integer,
-    price :: Float,
-    range :: String,
-    system_id :: SystemId,
-    type_id :: TypeId,
-    volume_remain :: Integer,
-    volume_total :: Integer
-  } deriving (Show, Generic, ToRow, NFData)
-instance FromJSON MarketOrder
-instance Processable MarketOrder
-instance Collectible MarketOrder
-instance Sqlible MarketOrder where
-  query = "INSERT INTO markets.orders (time, region_id, duration, is_buy_order, issued, location_id, min_volume, order_id, price, range, system_id, type_id, volume_remain, volume_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
-instance TimeRegionToValue MarketOrder where
-  timeRegionToValue ts regionId (MarketOrder duration_ is_buy_order_ issued_ location_id_ min_volume_ order_id_ price_ range_ system_id_ type_id_ volume_remain_ volume_total_) = [
-      toField $ posixSecondsToUTCTime ts,
-      toField regionId,
-      toField duration_,
-      toField is_buy_order_,
-      toField issued_,
-      toField location_id_,
-      toField min_volume_,
-      toField order_id_,
-      toField price_,
-      toField range_,
-      toField system_id_,
-      toField type_id_,
-      toField volume_remain_,
-      toField volume_total_]
-marketsRegionsOrdersPath :: EsiVersion -> EsiSource -> RegionId -> OrderTypes -> Int -> Endpoint
-marketsRegionsOrdersPath ver source region orders page = Endpoint p o
-  where p = esi ./ show ver ./ "markets" ./ show region ./ "orders"
-        o = genOptions params
-        params = [Param "datasource" [T.pack $ show source],
-                  Param "order_type" [T.pack $ show orders],
-                  Param "page" [T.pack $ show page]]
+collectedOrders :: RegionId -> OrderTypes -> PG.Connection -> IO ()
+collectedOrders region_ orders conn = do
+  (header, data_) <- collectOrderPage region_ orders 1
+  initialRowsInserted <- PG.executeMany conn (query @MarketOrder) $ map (parseOrder header region_) data_
+  res <- mapConcurrently (collectOrderPage region_ orders) [2 .. (getPages header)]
+  rowsInserted <- PG.executeMany conn (query @MarketOrder) $ map (parseOrder header region_) (concatMap snd res)
+  print (initialRowsInserted + rowsInserted)
+
+filteredRegions :: Integer -> [RegionId] -> [RegionId]
+filteredRegions region_ regions = if region_ < 0 then filter notMarketRegions regions else [region_]
+
+marketRegions :: [RegionId]
+marketRegions = [10000002, 10000030, 10000032, 10000042, 10000043]
+
+notMarketRegions :: RegionId -> Bool
+notMarketRegions i = i `notElem` marketRegions

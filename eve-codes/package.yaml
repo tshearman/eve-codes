@@ -41,6 +41,7 @@ dependencies:
 - SafeSemaphore
 - pooled-io
 - deepseq
+- retry
 
 library:
   source-dirs: src
