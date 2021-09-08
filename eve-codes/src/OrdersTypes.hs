@@ -41,7 +41,7 @@ instance Processable MarketOrder
 instance Collectible MarketOrder
 
 instance Sqlible MarketOrder where
-  query = "INSERT INTO markets.orders (time, region_id, duration, is_buy_order, issued, location_id, min_volume, order_id, price, range, system_id, type_id, volume_remain, volume_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
+  query = "INSERT INTO market.orders (time, region_id, duration, is_buy_order, issued, location_id, min_volume, order_id, price, range, system_id, type_id, volume_remain, volume_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
 
 instance TimeRegionToValue MarketOrder where
   timeRegionToValue ts regionId (MarketOrder duration_ is_buy_order_ issued_ location_id_ min_volume_ order_id_ price_ range_ system_id_ type_id_ volume_remain_ volume_total_) =
