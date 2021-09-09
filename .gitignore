@@ -25,3 +25,7 @@ Thumbs.db
 *.lock
 *Untitled*
 *.cabal
+
+scripts/secrets.sh
+stack.yaml*
+*.cabal

@@ -10,12 +10,11 @@ import qualified Options.Applicative as Opt
 import OrdersEndpoints
 import OrdersLib
 import UniverseLib (collectRegions)
+import qualified System.Environment as Env
 
 data Options = Options
   { host :: String,
     dbname :: String,
-    user :: String,
-    password :: String,
     region :: Integer,
     order_types :: String
   }
@@ -30,13 +29,13 @@ parse =
   Options
     <$> Opt.strOption (Opt.long "host" <> Opt.help "POSTGRES Hostname")
     <*> Opt.strOption (Opt.long "dbname" <> Opt.help "POSTGRES Database")
-    <*> Opt.strOption (Opt.long "user" <> Opt.help "POSTGRES User name")
-    <*> Opt.strOption (Opt.long "password" <> Opt.help "POSTGRES Password")
     <*> Opt.option Opt.auto (Opt.long "region" <> Opt.help "Eve Region id")
     <*> Opt.strOption (Opt.long "types" <> Opt.help "Order types to collect")
 
 execute :: Options -> IO ()
-execute (Options host_ db_ user_ pass_ region_ order_types_) = do
+execute (Options host_ db_ region_ order_types_) = do
+  user_ <- Env.getEnv "PG_USER"
+  pass_ <- Env.getEnv "PG_PASSWORD"
   (_, regions) <- collectRegions Latest Tranquility
   conn <- Connection.open host_ user_ pass_ db_
   _ <- mapConcurrently (\r -> collectedOrders r orderType conn) (regionFilter regions)
